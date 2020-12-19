@@ -32,6 +32,7 @@ g1 = np.random.multivariate_normal([3.9,10],[[0.01,0],[0,5]],10)
 g2 = np.random.multivariate_normal([3.4,30],[[0.25,0],[0,5]],10)
 g3 = np.random.multivariate_normal([2.0,10],[[0.5,0],[0,10]],10)
 x = np.vstack([g0,g1,g2,g3])
+
 # we will do XW + B
 # This implies that the data is N x D
 
@@ -57,8 +58,6 @@ assert(params['blayer1'].shape == (25,))
 # Check if it prints: 0, [0.05 to 0.12]
 print("{}, {:.2f}".format(params['blayer1'].sum(),params['Wlayer1'].std()**2))
 print("{}, {:.2f}".format(params['boutput'].sum(),params['Woutput'].std()**2))
-
-
 
 
 # Q 1.2.1 #=================================================
@@ -108,17 +107,14 @@ delta1 = probs
 delta1[np.arange(probs.shape[0]),y_idx] -= 1
 # We already got the simplified derivatives from softmax
 # So, instead of writing exceptional lines, we pass in a linear_deriv, which is just a vector of ones.
-delta2 = backwards(delta1,params,'output',linear_deriv)
-backwards(delta2,params,'layer1',sigmoid_deriv)
+#delta2 = backwards(delta1,params,'output',linear_deriv)
+#backwards(delta2,params,'layer1',sigmoid_deriv)
 
 # Check if W and b match their gradients sizes
 for k,v in sorted(list(params.items())):
     if 'grad' in k:
         name = k.split('_')[1]
         print(name,v.shape, params[name].shape)
-
-
-
 
 # Q 1.4.1 #=================================================
 # implement random batch division
@@ -130,34 +126,44 @@ batch_num = len(batches)
 
 # implement training loop in this file
 # CODE TO WRITE: forward, loss, backward, gradient update
-max_iters = 500
+max_iters = 1000
 learning_rate = 1e-3
+
+initialize_weights(2, 25, params, name="layer1")
+initialize_weights(25,4,params, name="output")
 # with default settings, you should get loss < 35 and accuracy > 75%
 for itr in range(max_iters):
     total_loss = 0
     avg_acc = 0
+    total_acc = []
     for xb,yb in batches:
-        pass # delete "pass" after your implementation
-
+        # delete "pass" after your implementation
         # CODE TO WIRTE: forward
-
+        h1 = forward(xb, params, name='layer1')
+        h2 = forward(h1, params, name='output', activation=softmax)
 
         # CODE TO WIRTE: loss
         # be sure to add loss and accuracy to epoch totals
+        loss, acc = compute_loss_and_acc(yb, h2)
 
+        total_loss += loss
+        total_acc.append(acc)
+        avg_acc = sum(total_acc)/len(total_acc)
 
         # CODE TO WIRTE: backward
         # be sure that backward(...) in nn.py doesn't include gradient update
-
+        delta = h2-yb
+        delta = backwards(delta, params, name='output', activation_deriv=linear_deriv)
+        delta = backwards(delta, params, name='layer1', activation_deriv=sigmoid_deriv)
 
         # CODE TO WIRTE: apply gradient update
+        params['W' + 'layer1'] -= learning_rate * params['grad_W' + 'layer1']
+        params['b' + 'layer1'] -= learning_rate * params['grad_b' + 'layer1']
+        params['W' + 'output'] -= learning_rate * params['grad_W' + 'output']
+        params['b' + 'output'] -= learning_rate * params['grad_b' + 'output']
 
-
-        
     if itr % 100 == 0:
         print("itr: {:02d} \t loss: {:.2f} \t acc : {:.2f}".format(itr,total_loss,avg_acc))
-
-
 
 
 # Q 1.5.1 #=================================================
@@ -175,6 +181,7 @@ params_orig = copy.deepcopy(params)
 # we'll try to get the same results with numerical gradients
 
 params_eps = {} # new params using numerical gradients
+params_eps = params
 eps = 1e-6
 for k,v in params.items():
     if '_' in k:
@@ -190,6 +197,27 @@ for k,v in params.items():
     #   get the loss
     #   compute derivatives with central differences
     #   store them inside the params_eps
+    print(k)
+    original_v = params_eps[k]
+    grad_v_add = v + np.ones_like(v) * eps
+    grad_v_sub = v - np.ones_like(v) * eps
+
+    params_eps[k] = grad_v_add
+    h_add = forward(x, params_eps, 'layer1') 
+    h_add = forward(h_add, params_eps, 'output', activation=softmax) 
+    params_eps[k] = grad_v_sub
+    h_sub = forward(x, params_eps, 'layer1') 
+    h_sub = forward(h_sub, params_eps, 'output', activation=softmax) 
+
+    loss_add, acc = compute_loss_and_acc(y, h_add)
+    loss_sub, acc = compute_loss_and_acc(y, h_sub)
+
+    params_eps[k] = original_v
+
+    print(params_eps['grad_' + k])
+    print(loss_add)
+
+    grad_v = (loss_add - loss_sub) / (2*eps)
 
     # store numerical gradients in params_eps
     params_eps['grad_' + k] = grad_v
